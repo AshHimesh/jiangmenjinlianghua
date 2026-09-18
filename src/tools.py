@@ -29,20 +29,14 @@ import json
 from . import jin10
 from .indicators import summarize
 from .kline import PERIODS, PERIOD_NAME, get_kline
-from .symbols import SYMBOL_MAP
+# 可用周期矩阵的唯一事实源在 src/symbols.py
+# （src/kline.py 的 get_kline 也用它做闸门，避免出现两处各写一份、互相漂移）
+from .symbols import PERIODS_BY_SOURCE, SYMBOL_MAP
 
 MAX_LIMIT = 120
 DEFAULT_LIMIT = 30
 
 SYMBOL_NAMES = list(SYMBOL_MAP.keys())
-
-# 各品种实际可用的周期（按数据源静态判断，避免逐个联网探测）
-PERIODS_BY_SOURCE = {
-    "sina_futures": ["W", "D", "12H", "4H", "1H", "15M", "5M"],
-    "sina_index": ["W", "D", "12H", "4H", "1H", "15M", "5M"],
-    "sina_foreign": ["W", "D", "4H", "1H", "15M", "5M"],
-    "sina_global": ["W", "D"],
-}
 
 
 def available_periods(symbol):

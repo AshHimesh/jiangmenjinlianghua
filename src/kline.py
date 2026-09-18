@@ -23,7 +23,7 @@ import akshare as ak
 import pandas as pd
 import requests
 
-from .symbols import SYMBOL_MAP
+from .symbols import SYMBOL_MAP, PERIODS_BY_SOURCE
 
 # 缓存有效期（秒）
 TTL_DAILY = 1800      # 日线及以上：30 分钟
@@ -41,6 +41,12 @@ STD_COLS = ["datetime", "open", "high", "low", "close", "volume"]
 
 # 新浪外盘 gb_ 代码 -> 美股指数代码
 US_INDEX_CODE = {"gb_ndx": ".NDX", "gb_inx": ".INX"}
+
+# K线接口用的代码（与实时接口不同时在这里转换，2026-09-18 实测）
+KLINE_SYMBOL = {
+    "rt_hkHSI": "HSI",        # 新浪港股指数日线用 HSI
+    "fx_susdcnh": "USDCNH",   # 新浪外汇日线用 USDCNH
+}
 
 SINA_HEADERS = {
     "Referer": "https://finance.sina.com.cn/",
@@ -82,20 +88,25 @@ def _resample(df, rule):
 
 # ---------------- 日线获取 ----------------
 
-def _fetch_diniw_daily():
-    """美元指数日线（新浪外汇接口，1985 年至今）。"""
+def _fetch_forex_daily(symbol):
+    """新浪外汇日线（美元指数 DINIW / 离岸人民币 USDCNH），1985 年或上市日起至今。
+
+    返回字段顺序：date, open, close, high, low（注意 close 在 high 之前，别按 OHLC 习惯读）。
+
+    注意：URL 里的 `%20` 是字面量，**不能用 %-格式化拼**（`%2` 会被当成格式符抛异常，
+    再被上层 except 吞掉 → 表现为「静默取不到数据」）。这里用字符串拼接。
+    """
     url = ("https://vip.stock.finance.sina.com.cn/forex/api/jsonp.php/"
-           "var%20_DINIW=/NewForexService.getDayKLine?symbol=DINIW")
+           "var%20_" + symbol + "=/NewForexService.getDayKLine?symbol=" + symbol)
     r = requests.get(url, headers=SINA_HEADERS, timeout=15)
     r.encoding = "gbk"
-    m = re.search(r'var _DINIW=\("(.*?)"\)', r.text, re.S)
+    m = re.search(r'var _' + re.escape(symbol) + r'=\("(.*?)"\)', r.text, re.S)
     if not m:
         return None
     rows = []
     for seg in m.group(1).split("|"):
         parts = seg.split(",")
         if len(parts) >= 5:
-            # date, open, close, high, low
             rows.append({
                 "date": parts[0], "open": parts[1], "close": parts[2],
                 "high": parts[3], "low": parts[4],
@@ -121,12 +132,23 @@ def fetch_daily(name):
             return _normalize(df, "date")
         if src == "sina_global":
             if sym == "DINIW":
-                df = _fetch_diniw_daily()
+                df = _fetch_forex_daily("DINIW")
                 return _normalize(df, "date")
             code = US_INDEX_CODE.get(sym)
             if code:
                 df = ak.index_us_stock_sina(symbol=code)
                 return _normalize(df, "date")
+        if src == "sina_hk":
+            # 新浪港股指数日线：代码用 HSI（与实时接口的 rt_hkHSI 不同）
+            df = ak.stock_hk_index_daily_sina(symbol=KLINE_SYMBOL.get(sym, sym))
+            return _normalize(df, "date")
+        if src == "sina_fx":
+            df = _fetch_forex_daily(KLINE_SYMBOL.get(sym, sym))
+            return _normalize(df, "date")
+        if src == "sge":
+            # 上金所日线：date, open, close, low, high
+            df = ak.spot_hist_sge(symbol=sym)
+            return _normalize(df, "date")
     except Exception:
         return None
     return None
@@ -195,6 +217,12 @@ def fetch_minute(name, period):
                 return None
             rule = {"1H": "60min", "15M": "15min", "5M": "5min"}[period]
             return _resample(base, rule)
+        # sina_hk / sina_fx / sge 无分钟线（2026-09-18 实测）：
+        #   港股：新浪分时接口已下线（返回 Service not valid），akshare 只剩东财接口，
+        #         而东财在本机被风控（403 hit risk）
+        #   外汇：新浪外汇分时要求 ticktime 参数，试了 scale/datalen 组合仍返回 null
+        #   上金所：只提供日频历史与实时快照，没有分时
+        return None
     except Exception:
         return None
     return None
@@ -210,6 +238,11 @@ def get_kline(name, period, force=False):
     :return: DataFrame[datetime, open, high, low, close, volume] 或 None
     """
     if period not in PERIODS:
+        return None
+    # 强制执行「数据源可用周期」声明（唯一事实源在 symbols.PERIODS_BY_SOURCE）。
+    # 不加这道闸，外盘品种的 12H 会被重采样成 2 根垃圾K线，指标算出来全是错的。
+    item = SYMBOL_MAP.get(name)
+    if item and period not in PERIODS_BY_SOURCE.get(item["source"], []):
         return None
     key = (name, period)
     ttl = TTL_DAILY if period in ("W", "D") else TTL_INTRADAY

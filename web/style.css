@@ -98,11 +98,45 @@ body {
   padding: 8px 0;
 }
 
+/* ===== 左栏品种分组（阶段 8：支持分组折叠）===== */
+
 .group-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   color: var(--text-sub);
   padding: 14px 20px 6px;
   letter-spacing: 1px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.group-title:hover {
+  color: var(--text);
+}
+
+/* 折叠箭头：默认展开朝下，折叠后朝右 */
+.group-arrow {
+  display: inline-block;
+  font-size: 9px;
+  transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+
+.symbol-group.collapsed .group-arrow {
+  transform: rotate(0deg);
+}
+
+.group-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-sub);
+  opacity: 0.7;
+}
+
+.symbol-group.collapsed .group-items {
+  display: none;
 }
 
 .symbol-item {

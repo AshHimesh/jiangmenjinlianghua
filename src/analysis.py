@@ -16,39 +16,74 @@ from .symbols import SYMBOL_MAP
 MAX_SYMBOLS = 3
 
 # 品种别名（用于从用户问题中识别提到的品种）
+# 注意：别名之间存在包含关系（黄金 / 黄金ETF、原油 / 布伦特原油、美元 / 美元兑离岸人民币），
+# 因此 detect_symbols 按「命中的别名长度」降序取，长的优先，避免短别名抢走长别名。
 ALIASES = {
     "现货黄金": ["现货黄金", "黄金", "金价", "伦敦金", "xau", "gold"],
     "现货白银": ["现货白银", "白银", "银价", "伦敦银", "xag", "silver"],
-    "铜": ["现货铜", "美铜", "comex铜", "铜价", "铜"],
+    "上海金": ["上海金", "au99.99", "au9999", "上金所", "上海黄金"],
+    "沪金AU": ["沪金au", "沪金", "沪金主力", "au0", "shfe金"],
+    "沪银AG": ["沪银ag", "沪银", "沪银主力", "ag0"],
+    "铜": ["现货铜", "美铜", "comex铜", "铜价", "沪铜", "铜"],
     "WTI原油": ["wti", "美油", "原油", "油价", "crude", "oil"],
+    "布伦特原油": ["布伦特原油", "布伦特", "布油", "brent", "ukoil"],
     "纳斯达克100": ["纳斯达克100", "纳斯达克", "纳指", "ndx", "nasdaq"],
     "标普500": ["标普500", "标普", "spx", "s&p"],
     "美元指数": ["美元指数", "美指", "dxy", "美元"],
+    "恒生指数": ["恒生指数", "恒指", "hsi", "港股"],
     "螺纹钢": ["螺纹钢", "螺纹", "rb"],
+    "铁矿石": ["铁矿石", "铁矿", "i0"],
     "焦煤": ["焦煤", "jm"],
+    "玻璃": ["玻璃", "fg"],
+    "纯碱": ["纯碱", "sa"],
     "甲醇": ["甲醇", "ma"],
     "乙二醇": ["乙二醇", "eg"],
-    "纯碱": ["纯碱", "sa"],
-    "科创50": ["科创50", "科创板50", "科创"],
     "上证指数": ["上证指数", "上证", "大盘", "沪指"],
+    "沪深300": ["沪深300", "hs300", "csi300", "沪深"],
+    "创业板指": ["创业板指", "创业板", "创指", "399006"],
+    "科创50": ["科创50", "科创板50", "科创"],
+    "黄金ETF": ["黄金etf", "518880", "黄金基金"],
+    "美元兑离岸人民币": ["美元兑离岸人民币", "离岸人民币", "usdcnh", "cnh", "离岸汇率"],
 }
 
 
 def detect_symbols(question, focus=None, limit=MAX_SYMBOLS):
-    """从用户问题中识别提到的品种；focus（当前查看的品种）永远排第一。"""
+    """
+    从用户问题中识别提到的品种；focus（当前查看的品种）永远排第一。
+
+    命中规则：按「命中的别名长度」降序取。这样问「黄金ETF」时命中的是
+    「黄金etf」(6 字) 而不是「现货黄金」的别名「黄金」(2 字)；
+    问「布伦特原油」时不会被「WTI原油」的别名「原油」抢走。
+    """
     q = (question or "").lower()
     found = []
     if focus and focus in SYMBOL_MAP:
         found.append(focus)
+
+    hits = []
     for name in SYMBOL_MAP:
         if name in found:
             continue
+        best_len, best_pos = 0, 0
         for alias in ALIASES.get(name, [name]):
-            if alias.lower() in q:
-                found.append(name)
-                break
+            a = (alias or "").lower()
+            if not a:
+                continue
+            pos = q.find(a)
+            if pos < 0:
+                continue
+            # 同一品种内取更靠前的命中位置；若新别名更长则改用更长者
+            if len(a) > best_len or (best_len and len(a) == best_len and pos < best_pos):
+                best_len, best_pos = len(a), pos
+        if best_len:
+            hits.append((best_len, best_pos, name))
+
+    # 先按别名长度降序（越长越具体），长度相同则按在问题里出现的先后
+    hits.sort(key=lambda x: (-x[0], x[1]))
+    for _length, _pos, name in hits:
         if len(found) >= limit:
             break
+        found.append(name)
     return found[:limit]
 
 

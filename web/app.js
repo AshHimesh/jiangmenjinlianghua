@@ -64,10 +64,32 @@ function renderSidebar() {
   sidebar.innerHTML = '';
 
   groups.forEach((group) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'symbol-group' + (isCollapsed(group.name) ? ' collapsed' : '');
+
     const title = document.createElement('div');
     title.className = 'group-title';
-    title.textContent = group.name;
-    sidebar.appendChild(title);
+    title.title = '点击折叠 / 展开';
+
+    const arrow = document.createElement('span');
+    arrow.className = 'group-arrow';
+    arrow.textContent = '▶';
+
+    const label = document.createElement('span');
+    label.textContent = group.name;
+
+    const count = document.createElement('span');
+    count.className = 'group-count';
+    count.textContent = group.items.length;
+
+    title.appendChild(arrow);
+    title.appendChild(label);
+    title.appendChild(count);
+    title.addEventListener('click', () => toggleGroup(group.name));
+    wrap.appendChild(title);
+
+    const items = document.createElement('div');
+    items.className = 'group-items';
 
     group.items.forEach((item) => {
       const el = document.createElement('div');
@@ -98,9 +120,42 @@ function renderSidebar() {
       el.appendChild(nameSpan);
       el.appendChild(priceSpan);
       el.addEventListener('click', () => selectSymbol(item.name));
-      sidebar.appendChild(el);
+      items.appendChild(el);
     });
+
+    wrap.appendChild(items);
+    sidebar.appendChild(wrap);
   });
+
+  updateSidebarPrices();
+}
+
+// ===== 分组折叠（阶段 8）=====
+function collapsedSet() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('collapsedGroups') || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function isCollapsed(name) {
+  return collapsedSet().has(name);
+}
+
+function toggleGroup(name) {
+  const set = collapsedSet();
+  if (set.has(name)) {
+    set.delete(name);
+  } else {
+    set.add(name);
+  }
+  try {
+    localStorage.setItem('collapsedGroups', JSON.stringify([...set]));
+  } catch (e) {
+    /* 存不下就只影响本次会话，不影响功能 */
+  }
+  renderSidebar();
 }
 
 function updateSidebarPrices() {
@@ -151,9 +206,9 @@ function renderQuote(name) {
     return;
   }
 
-  // R7-B：行情看板的价格恒来自免费源。
-  // 金十只走 AI 按需调用（R7-C 禁止把金十接进刷新循环），所以这里不该出现金十分支。
-  srcEl.textContent = '来源：新浪财经（免费源）';
+  // 数据来源标注（R7-B）：后端按品种给出 source，逐条如实显示
+  // （绝大多数品种是新浪免费源；上海金来自上海黄金交易所）
+  srcEl.textContent = '来源：' + (q.source || '新浪财经 · 免费源');
   srcEl.className = 'quote-src';
 
   priceEl.textContent = formatPrice(q.price);
