@@ -41,6 +41,9 @@ def _pyinstaller_args(onefile, console):
         "--collect-all", "pythonnet",
         "--collect-all", "clr_loader",
         "--collect-all", "curl_cffi",
+        # 阶段 9：分析图表。matplotlib 有大量数据文件（字体度量、样式），整体收集
+        # （中文字体不打包：直接读 C:\Windows\Fonts\，Windows 自带）
+        "--collect-all", "matplotlib",
         "--hidden-import", "webview.platforms.edgechromium",
         "--hidden-import", "webview.platforms.winforms",
         "--hidden-import", "sqlite3",
@@ -83,7 +86,9 @@ def _copy_user_files(target_dir, onefile):
             "   你可以直接往里面放自己的技能文件，重新打开程序即自动加载；\n"
             "   也可以在程序里点 ⚙ → 导入技能文件。\n\n"
             "4. cache.db 是相似问题缓存，删掉即可清空缓存。\n\n"
-            "5. 若程序无法启动，请看同目录下的 error.log。\n"
+            "5. reports 文件夹是导出的分析报告（.md 可编辑、.html 双击即看/可打印成 PDF）。\n"
+            "   在对话区点「生成研报」可一键出报告，或点「导出报告」把当前回答落成文件。\n\n"
+            "6. 若程序无法启动，请看同目录下的 error.log。\n"
             % NAME
         )
     print("[OK] 已生成 使用说明.txt")

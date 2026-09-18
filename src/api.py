@@ -3,7 +3,23 @@
 from . import jin10, qacache
 from .analysis import warm
 from .config import PROVIDERS, load_config, save_config
+from .report import export as export_report_file, list_reports, open_reports_dir
 from .skills import import_skill, list_skills, resolve_active, stats as skill_stats
+
+# 一键研报的指令（阶段 9）。写成固定模板：AI 只负责按 skill 流程填内容，
+# 价位一律要求来自给定数据，最后必须画图 —— 图是报告的必要组成。
+REPORT_PROMPT = (
+    "请对「%(symbol)s」做一次研报级分析，并严格按以下结构输出：\n"
+    "一、多周期判读：先大周期定方向，再小周期找时机，写明你依据的周期。\n"
+    "二、浪型计数：说明你怎么数的浪、依据是什么、当前处于第几浪。\n"
+    "三、关键价位：支撑位至少 2 个、压力位至少 2 个，每个都说明依据。\n"
+    "四、交易计划：入场位、止损位 SL、分档止盈 TP1/TP2/TP3，并算出盈亏比。\n"
+    "五、事件风险：如已启用金十，先查本周财经日历，列出影响该品种的重大事件与公布时间。\n"
+    "六、风险提示。\n"
+    "最后**必须**调用 render_analysis_chart，把你数出的浪型与上述价位画成图，"
+    "period 用你交易计划所在的主周期。\n"
+    "所有价位必须来自给定数据或工具返回，不得编造；数据缺失就如实说明。"
+)
 
 
 class Api:
@@ -122,6 +138,56 @@ class Api:
     def clear_chat(self):
         """清空对话历史。"""
         return self._chat.clear()
+
+    # ---------- 报告（阶段 9）----------
+    def make_report(self, symbol=None):
+        """一键生成完整研报：按启用的 skill 流程分析，最后画K线标注图。
+
+        实现方式 = 用固定指令发起一次提问，之后照常走 get_stream 轮询，
+        答完后前端再调 export_report() 把回答落成文件。
+        """
+        symbol = (symbol or "").strip()
+        if not symbol:
+            return {"error": "请先在左侧选中一个品种。"}
+        cfg = load_config()
+        if not cfg.get("enable_tools"):
+            return {"error": "生成研报需要开启「允许 AI 主动读取数据（工具调用）」，请到 ⚙ 设置里打开。"}
+        if not (cfg.get("api_key") or "").strip():
+            return {"error": "还没配置 AI 的 API Key，请到 ⚙ 设置里填写。"}
+        return self.ask(REPORT_PROMPT % {"symbol": symbol}, focus=symbol, force=True)
+
+    def export_report(self):
+        """把最近一条回答导出为报告（.md + 自包含 .html），返回文件路径。"""
+        st = self._chat.get_stream()
+        if not st or not st.get("content"):
+            return {"error": "还没有可导出的回答。"}
+        if st.get("error"):
+            return {"error": "上一条回答出错，无法导出：%s" % st["error"]}
+        cfg = load_config()
+        active = resolve_active(cfg.get("active_skills"))
+        res = export_report_file(
+            symbol=st.get("focus") or "",
+            question=st.get("question") or "",
+            answer=st.get("content") or "",
+            charts=st.get("charts") or [],
+            model=cfg.get("model", ""),
+            skills=active,
+            quotes=self._service.get_quotes(),
+        )
+        return res
+
+    def list_reports(self):
+        """最近导出的报告文件列表。"""
+        return list_reports()
+
+    def open_reports_dir(self):
+        """用资源管理器打开 reports 目录。"""
+        return open_reports_dir()
+
+    def open_report(self, path):
+        """用系统默认程序打开某个报告文件（.html → 浏览器，.md → 记事本）。"""
+        from .report import open_report as _open
+        return _open(path)
 
     # ---------- 相似问题缓存 ----------
     def get_cache_stats(self):

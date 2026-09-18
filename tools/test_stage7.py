@@ -103,13 +103,14 @@ def t_gating():
 
     off = {"enable_tools": True, "jin10_enabled": False, "jin10_api_key": ""}
     names_off = [t["function"]["name"] for t in tools.active_tool_schemas(off)]
-    check("未启用金十 → 只暴露 3 个免费源工具", len(names_off) == 3, str(names_off))
+    # 阶段 9 新增 render_analysis_chart，免费源工具由 3 个变 4 个
+    check("未启用金十 → 只暴露 4 个免费源工具", len(names_off) == 4, str(names_off))
     check("未启用金十 → 不含 jin10_*",
           not any(n.startswith("jin10_") for n in names_off))
 
     on = {"enable_tools": True, "jin10_enabled": True, "jin10_api_key": "dummy-key-for-gating"}
     names_on = [t["function"]["name"] for t in tools.active_tool_schemas(on)]
-    check("启用金十 → 暴露 3 + 8 = 11 个工具", len(names_on) == 11, str(len(names_on)))
+    check("启用金十 → 暴露 4 + 8 = 12 个工具", len(names_on) == 12, str(len(names_on)))
     check("启用金十 → 8 个 jin10_* 全部到位",
           sorted(n for n in names_on if n.startswith("jin10_")) == sorted(tools.JIN10_TOOL_NAMES),
           str(tools.JIN10_TOOL_NAMES))
@@ -119,7 +120,7 @@ def t_gating():
 
     # 每个工具都要有 executor，否则 AI 调了会报「不存在该工具」
     missing = [n for n in names_on if n not in tools._EXECUTORS]
-    check("11 个工具都有 executor", not missing, str(missing))
+    check("12 个工具都有 executor", not missing, str(missing))
 
     # summarize_call 对每个工具都能出中文标签
     bad = []

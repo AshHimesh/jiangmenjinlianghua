@@ -600,6 +600,11 @@ async function pollStream() {
       showAiError(els, '模型没有返回内容，请检查模型名称是否正确。');
     }
     finishStream();
+    // 「生成研报」答完自动落成文件（阶段 9）
+    if (pendingExport) {
+      pendingExport = false;
+      exportReport(els);
+    }
     return;
   }
 
@@ -664,6 +669,20 @@ function addAiMsg() {
   answer.className = 'answer-text';
   answer.style.display = 'none';
 
+  const foot = document.createElement('div');
+  foot.className = 'msg-foot';
+  foot.style.display = 'none';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'msg-btn';
+  copyBtn.textContent = '复制';
+  copyBtn.title = '复制这条回答的文本';
+  copyBtn.addEventListener('click', () => copyText(answer.textContent, copyBtn));
+  foot.appendChild(copyBtn);
+
+  const reportNote = document.createElement('div');
+  reportNote.className = 'report-note';
+
   const cacheNote = document.createElement('div');
   cacheNote.className = 'cache-note';
   cacheNote.style.display = 'none';
@@ -677,6 +696,8 @@ function addAiMsg() {
   el.appendChild(thinking);
   el.appendChild(placeholder);
   el.appendChild(answer);
+  el.appendChild(foot);
+  el.appendChild(reportNote);
   box.appendChild(el);
 
   const els = {
@@ -689,6 +710,8 @@ function addAiMsg() {
     answer: answer,
     cacheNote: cacheNote,
     toolList: toolList,
+    foot: foot,
+    reportNote: reportNote,
     toolSig: '',
     cacheShown: false,
     userToggled: false,
@@ -749,6 +772,8 @@ function updateAiMsg(els, st) {
     els.answer.textContent = st.content;
     els.answer.style.display = '';
     els.placeholder.style.display = 'none';
+    // 有正文才给「复制」，避免空消息上也挂按钮
+    els.foot.style.display = '';
   } else if (!st.done) {
     els.placeholder.textContent = st.thinking ? '正在组织回答…' : '正在思考…';
   }
@@ -815,6 +840,94 @@ async function clearChat() {
   box.innerHTML = '<div class="msg ai">对话已清空。选中左侧品种后可以继续提问。</div>';
 }
 
+// ================= 报告（阶段 9）=================
+let pendingExport = false;
+
+function copyText(text, btn) {
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = '已复制 ✓';
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  };
+  const fallback = () => {
+    // pywebview 里 navigator.clipboard 不一定可用：退回 execCommand
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      done();
+    } catch (e) {
+      btn.textContent = '复制失败';
+    }
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else {
+    fallback();
+  }
+}
+
+async function makeReport() {
+  if (streaming) return;
+  const api = getApi();
+  if (!api || !currentName) return;
+  const res = await api.make_report(currentName);
+  if (res && res.error) {
+    const els = addAiMsg();
+    showAiError(els, res.error);
+    return;
+  }
+  pendingExport = true;
+}
+
+async function exportReport(els) {
+  const api = getApi();
+  if (!api || !api.export_report) return;
+  const target = els || streamEls;
+  try {
+    const res = await api.export_report();
+    if (!target) return;
+    if (res && res.error) {
+      target.reportNote.textContent = '导出失败：' + res.error;
+      target.reportNote.style.display = '';
+      return;
+    }
+    target.reportNote.innerHTML = '';
+    const line = document.createElement('div');
+    line.textContent = '已导出报告 ✓ ' + (res.html || '').split('\\').pop()
+      + (res.charts && res.charts.length ? '' : '（本轮无图表）');
+    const actions = document.createElement('span');
+    actions.className = 'report-actions';
+
+    const openBtn = document.createElement('button');
+    openBtn.className = 'msg-btn';
+    openBtn.textContent = '打开报告';
+    openBtn.addEventListener('click', () => api.open_report(res.html));
+
+    const dirBtn = document.createElement('button');
+    dirBtn.className = 'msg-btn';
+    dirBtn.textContent = '打开目录';
+    dirBtn.addEventListener('click', () => api.open_reports_dir());
+
+    actions.appendChild(openBtn);
+    actions.appendChild(dirBtn);
+    target.reportNote.appendChild(line);
+    target.reportNote.appendChild(actions);
+    target.reportNote.style.display = '';
+  } catch (e) {
+    if (target) {
+      target.reportNote.textContent = '导出失败：' + e;
+      target.reportNote.style.display = '';
+    }
+  }
+}
+
 // ================= 事件绑定 =================
 function bindEvents() {
   document.getElementById('gearBtn').addEventListener('click', openSettings);
@@ -828,6 +941,8 @@ function bindEvents() {
   });
   document.getElementById('importSkillBtn').addEventListener('click', importSkill);
   document.getElementById('clearCacheBtn').addEventListener('click', clearCache);
+  document.getElementById('reportBtn').addEventListener('click', makeReport);
+  document.getElementById('exportBtn').addEventListener('click', () => exportReport(null));
   document.getElementById('jin10TestBtn').addEventListener('click', testJin10);
 
   const input = document.getElementById('chatInput');

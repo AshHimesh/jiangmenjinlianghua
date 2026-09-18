@@ -164,6 +164,35 @@ def _selftest():
             log(traceback.format_exc())
 
         log("")
+        log("---- 分析图表（阶段 9）----")
+        try:
+            from src.chart import render, reports_dir, resolve_font
+
+            fp = resolve_font()
+            log("  中文字体      : %s" % (fp or "❌ 未找到（图上中文会显示为方块）"))
+            res = render(
+                "螺纹钢", "D",
+                waves=[{"label": "①", "index": 5, "price": 3020},
+                       {"label": "③", "index": 30, "price": 3180}],
+                support=[3000, 2950], resistance=[3200], entry=3080,
+                stop_loss=3010, take_profit=[3200, 3280],
+                note="--selftest 自动生成，可直接删除",
+            )
+            if res.get("ok"):
+                log("  生成图表      : ✅ %s（%d 根，含标注）" % (
+                    os.path.basename(res["path"]), res["bars"]))
+                for w in res.get("warnings") or []:
+                    log("    ⚠ %s" % w)
+                os.remove(res["path"])       # 自检产物用完即删，不留在 reports/
+                log("  输出目录      : %s（自检图片已清理）" % reports_dir())
+            else:
+                log("  生成图表      : ❌ %s" % res.get("error"))
+        except Exception as e:
+            log("  图表检查异常  : %r" % e)
+            import traceback
+            log(traceback.format_exc())
+
+        log("")
         log("---- 缓存 ----")
         try:
             log("  %s" % qacache.stats())

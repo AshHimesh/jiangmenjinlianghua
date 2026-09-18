@@ -22,9 +22,12 @@ _TOOLS_UNSUPPORTED = set()
 # 最多保留的历史消息条数（防止无限增长）
 MAX_HISTORY = 20
 
+# 品种清单从 symbols 派生，避免「提示词写 14 个、实际 25 个」这种文档级失真
+_SYMBOL_TEXT = "、".join(it["name"] for g in GROUPS for it in g["items"])
+
 SYSTEM_PROMPT = """你是「江门金量化」内置的行情分析助手，服务于关注多市场联动的中文投资者。
 
-用户关注这些品种：现货黄金、现货白银、铜、WTI原油、纳斯达克100、标普500、美元指数、螺纹钢、焦煤、甲醇、乙二醇、纯碱、科创50、上证指数。
+用户关注这些品种：%(symbols)s。
 
 你会收到两类数据：
 1.【实时行情快照】—— 全部品种的最新价与涨跌幅。
@@ -40,7 +43,7 @@ SYSTEM_PROMPT = """你是「江门金量化」内置的行情分析助手，服�
 4. 明确给出**关键支撑位与阻力位**（用具体数字），并说明依据。
 5. 回答简洁、条理清晰，用短段落或要点列表，避免长篇大论。
 6. 涉及操作建议时必须提示风险，不做任何收益承诺。
-7. 一律使用简体中文回答。"""
+7. 一律使用简体中文回答。""" % {"symbols": _SYMBOL_TEXT}
 
 # 工具能力说明（仅在启用工具时附加）
 TOOL_HINT = """
@@ -49,6 +52,7 @@ TOOL_HINT = """
 - `get_kline`：读取任意品种、任意周期的原始K线（含精确历史价位，最多 120 根）
 - `get_indicators`：读取任意品种、任意周期的完整技术指标
 - `list_symbols`：查询品种清单与各自支持的周期
+- `render_analysis_chart`：把你的结论画成K线标注图（浪型、支撑压力、入场、止损、分档止盈）
 
 使用原则：
 1. 上述【多周期技术面】已覆盖的品种与周期，直接用给定数据，**不必重复读取**。
@@ -56,6 +60,8 @@ TOOL_HINT = """
    跳空缺口、更长的历史时，**主动调用工具**去取，不要凭猜测作答。
 3. 需要多个品种或多个周期时，可以在一次回答里连续调用多次工具。
 4. 工具返回「暂无数据」时，如实告知用户该周期不可用，不要编造。
+5. 【画图】只有当你已经得出完整结论（含浪型与价位）时才调 `render_analysis_chart`，
+   且**每条回答最多画一张**；参数里的 index 要用 `get_kline` 返回的窗口内序号。
 """
 
 # 金十工具说明（仅在用户配置了金十 Key 且开关打开时附加）
@@ -162,6 +168,8 @@ class ChatSession:
                 # 命中缓存：直接返回上次答案，不调用 AI
                 self._state = {
                     "id": req_id,
+                    "question": question,
+                    "focus": focus,
                     "thinking": "",
                     "content": hit["answer"],
                     "thinking_done": True,
@@ -172,6 +180,7 @@ class ChatSession:
                     "cache_age": hit.get("age"),
                     "cache_similarity": hit.get("similarity"),
                     "tools": [],
+                    "charts": [],
                 }
                 self.history.append({"role": "user", "content": question})
                 self.history.append({"role": "assistant", "content": hit["answer"]})
@@ -179,6 +188,8 @@ class ChatSession:
 
             self._state = {
                 "id": req_id,
+                "question": question,
+                "focus": focus,
                 "thinking": "",
                 "content": "",
                 "thinking_done": False,
@@ -187,6 +198,7 @@ class ChatSession:
                 "error": None,
                 "cached": False,
                 "tools": [],
+                "charts": [],          # 本轮生成的图表 PNG 绝对路径（导出报告用）
             }
 
         # ---------- 2) 未命中：调用 AI ----------
@@ -253,6 +265,11 @@ class ChatSession:
                             if it["status"] == "running":
                                 it["status"] = "done"
                                 break
+                        # 记录本轮生成的图表（导出报告时要嵌入）
+                        if name == "render_analysis_chart" and result:
+                            for line in str(result).split("\n"):
+                                if line.startswith("[[chart:") and line.endswith("]]"):
+                                    self._state["charts"].append(line[8:-2])
 
             def _run_stream(use_tool_schemas):
                 return stream_completion(
@@ -274,6 +291,7 @@ class ChatSession:
                             self._state["thinking"] = ""
                             self._state["content"] = ""
                             self._state["tools"] = []
+                            self._state["charts"] = []
                     answer_parts.clear()
                     _run_stream(False)
             else:

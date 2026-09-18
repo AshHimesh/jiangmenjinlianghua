@@ -269,6 +269,51 @@ body {
   color: var(--text);
 }
 
+/* 顶栏按钮组（阶段 9：生成研报 / 导出报告） */
+.head-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.head-actions .link-btn {
+  margin-left: 0;
+}
+
+/* AI 回答底部的操作行与报告提示 */
+.msg-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.msg-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text-sub);
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.msg-btn:hover {
+  color: var(--text);
+  border-color: var(--text-sub);
+}
+
+.report-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;

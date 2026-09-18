@@ -105,6 +105,51 @@ TOOL_SCHEMAS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "render_analysis_chart",
+            "description": (
+                "把你的分析结论画成一张K线标注图：浪型计数、支撑/压力位、入场位、止损位、"
+                "分档止盈位都会标在图上。图片只嵌入导出的报告，不会出现在主界面。"
+                "当你已经得出完整的交易计划（或用户要求生成报告/研报）时调用它。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string", "enum": SYMBOL_NAMES, "description": "品种名称"},
+                    "period": {
+                        "type": "string", "enum": PERIODS,
+                        "description": "K线周期：选你这份交易计划所在的主周期",
+                    },
+                    "waves": {
+                        "type": "array",
+                        "description": "艾略特波浪计数（可选）。每项 {label, index, price}；"
+                                       "index 为最近窗口内K线序号（0 = 最早一根），price 为该浪起点价位",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string", "description": "浪型标记，如 ①②③④⑤ 或 A/B/C"},
+                                "index": {"type": "integer", "description": "该浪起点在窗口内的K线序号（0 基）"},
+                                "price": {"type": "number", "description": "该浪起点价位"},
+                            },
+                            "required": ["label", "index", "price"],
+                        },
+                    },
+                    "support": {"type": "array", "items": {"type": "number"},
+                                "description": "支撑位列表（可选，可多个）"},
+                    "resistance": {"type": "array", "items": {"type": "number"},
+                                   "description": "压力位列表（可选，可多个）"},
+                    "entry": {"type": "number", "description": "入场位（可选）"},
+                    "stop_loss": {"type": "number", "description": "止损位 SL（可选）"},
+                    "take_profit": {"type": "array", "items": {"type": "number"},
+                                    "description": "分档止盈位 TP1/TP2/TP3（可选）"},
+                    "note": {"type": "string", "description": "图上要写的一句话备注（可选）"},
+                },
+                "required": ["symbol", "period"],
+            },
+        },
+    },
 ]
 
 
@@ -338,6 +383,44 @@ def _tool_list_symbols():
     return "\n".join(lines)
 
 
+def _tool_render_analysis_chart(symbol, period, waves=None, support=None,
+                                resistance=None, entry=None, stop_loss=None,
+                                take_profit=None, note=None):
+    """把 AI 的结构化分析结论画成K线标注图（图片只进报告，不进主界面）。"""
+    err = _check(symbol, period)
+    if err:
+        return err
+
+    from . import chart        # 延迟导入：没装 matplotlib 时其余功能照常可用
+    res = chart.render(symbol, period, waves=waves, support=support,
+                       resistance=resistance, entry=entry, stop_loss=stop_loss,
+                       take_profit=take_profit, note=note)
+    if not res.get("ok"):
+        return "画图失败：%s" % res.get("error", "未知原因")
+
+    parts = []
+    parts.append("✅ 已生成 %s %s 的K线标注图（%d 根）" % (symbol, PERIOD_NAME[period], res["bars"]))
+    parts.append("[[chart:%s]]" % res["path"])
+    counts = []
+    if waves:
+        counts.append("浪型 %d 个" % len(waves))
+    if support:
+        counts.append("支撑 %d 个" % len(support))
+    if resistance:
+        counts.append("压力 %d 个" % len(resistance))
+    if entry is not None:
+        counts.append("入场位")
+    if stop_loss is not None:
+        counts.append("止损位")
+    if take_profit:
+        counts.append("止盈 %d 档" % len(take_profit))
+    parts.append("已标注：" + ("、".join(counts) if counts else "无价位标注"))
+    if res.get("warnings"):
+        parts.append("注意：" + "；".join(res["warnings"]))
+    parts.append("说明：图表不会出现在主界面，导出报告时会自动嵌入。")
+    return "\n".join(parts)
+
+
 # ---------------- 金十工具实现 ----------------
 # 全部委托给 src/jin10.py；那里已经保证「额度/未配置/网络错误」都返回可读文本。
 
@@ -377,6 +460,7 @@ _EXECUTORS = {
     "get_kline": _tool_get_kline,
     "get_indicators": _tool_get_indicators,
     "list_symbols": lambda **_: _tool_list_symbols(),
+    "render_analysis_chart": _tool_render_analysis_chart,
     # 金十（阶段 7）。即使未启用也注册：此时 jin10.* 会返回「未启用」的可读说明，
     # 比让 execute 报「不存在该工具」更友好。
     "jin10_quote": _tool_jin10_quote,
@@ -434,6 +518,10 @@ def summarize_call(name, arguments):
         return "读取 %s 的%s指标" % (args.get("symbol", "?"), PERIOD_NAME.get(args.get("period"), args.get("period", "?")))
     if name == "list_symbols":
         return "查询可用品种与周期"
+    if name == "render_analysis_chart":
+        return "绘制 %s 的%s标注图" % (
+            args.get("symbol", "?"),
+            PERIOD_NAME.get(args.get("period"), args.get("period", "?")))
 
     # 金十（阶段 7）—— 标签统一带「金十」，让用户在界面上能一眼看出数据出处（R7-B）
     code = args.get("code", "?")
