@@ -38,7 +38,7 @@ jiangmenjinlianghua/
 ├── src/                      # 后端
 │   ├── paths.py              # 资源目录 / 用户数据目录解析
 │   ├── netguard.py           # 全局网络超时保护（防止 akshare 请求永久阻塞）
-│   ├── symbols.py            # 14 个品种与数据源映射
+│   ├── symbols.py            # 25 个品种 + 数据源映射 + 可用周期矩阵（唯一事实源）
 │   ├── fetcher.py            # 实时行情抓取 + 后台刷新服务
 │   ├── kline.py              # 多周期K线（含重采样与缓存）
 │   ├── indicators.py         # 技术指标计算
@@ -72,7 +72,9 @@ jiangmenjinlianghua/
 │   ├── check_exe_icon.py     # 检查 exe 内图标资源尺寸
 │   ├── refresh_icon_cache.py # 重建 Windows 图标缓存（换图标后 Explorer 不刷新时用）
 │   ├── check_jin10_mcp.py    # 金十 MCP 探测（需 JIN10_DEV_TOKEN，不硬编码 token）
+│   ├── verify_stage8_sources*.py # 阶段 8 品种数据源探测（打印原始报文与字段下标）
 │   ├── test_stage7.py        # 阶段 7 自测（离线可跑；真连需 token）
+│   ├── test_stage8.py        # 阶段 8 自测（周期矩阵双向断言，联网）
 │   └── test_*.py             # 其它模块测试脚本
 │
 │   ⚠️ 以 `_` 开头的脚本/产物（如 `_jin10_token.txt`）是开发期临时件，不入库
@@ -107,6 +109,9 @@ jiangmenjinlianghua/
 
 # 阶段 7 自测（离线可跑；要真连金十先设环境变量 JIN10_DEV_TOKEN）
 .\.venv\Scripts\python.exe tools\test_stage7.py
+
+# 阶段 8 自测（联网，校验 25 个品种的实时行情与可用周期矩阵）
+.\.venv\Scripts\python.exe tools\test_stage8.py
 ```
 
 ## 4. 工作说明（开发约定）
@@ -118,6 +123,6 @@ jiangmenjinlianghua/
 5. **标准即文档**：需求、技术、设计有变更时同步更新对应标准文件。
 6. **阶段要验收**：按 `docs/04-开发执行步骤.md` 的验收标准检查。
 7. **打包后必自检**：任何打包改动后，都要跑一次 `--selftest`，
-   确认「14 品种行情 / 多周期K线 / 技能加载 / AI工具」四项正常
+   确认「全部品种行情 / 多周期K线 / 技能加载 / AI工具」四项正常
    （详见 `docs/02-技术方案.md` 第 7 节的踩坑记录：漏打包 `py_mini_racer` 会导致国内期货静默失败）。
 8. **不写代码进日志**：日志只记事实与进度。
