@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>江门金量化</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- 顶栏 -->
+    <header class="topbar">
+      <img class="avatar" src="avatar.png" alt="">
+      <h1 class="brand">江门金量化</h1>
+      <span class="tagline">行情看板 · AI 对话</span>
+      <button class="gear" id="gearBtn" title="AI 设置">⚙</button>
+    </header>
+
+    <div class="main">
+      <!-- 左栏：品种列表 -->
+      <aside class="sidebar" id="sidebar">
+        <!-- 由 app.js 动态渲染 -->
+      </aside>
+
+      <!-- 右栏 -->
+      <section class="content">
+        <!-- 价格显示区 -->
+        <div class="quote">
+          <div class="quote-name" id="quoteName">—</div>
+          <div class="quote-price" id="quotePrice">--</div>
+          <div class="quote-meta">
+            <span class="quote-change" id="quoteChange">--</span>
+            <span class="quote-unit" id="quoteUnit"></span>
+          </div>
+          <div class="quote-time" id="quoteTime">正在加载行情…</div>
+        </div>
+
+        <!-- AI 对话区 -->
+        <div class="chat">
+          <div class="chat-head">
+            <span class="chat-title">AI 行情分析</span>
+            <button class="link-btn" id="clearBtn">清空对话</button>
+          </div>
+
+          <div class="chat-messages" id="chatMessages">
+            <div class="msg ai">您好，我是行情分析助手。选中左侧品种后可以直接问我，例如「黄金现在怎么看」，我会结合实时行情来回答。</div>
+          </div>
+
+          <div class="chat-input">
+            <textarea id="chatInput" rows="1" placeholder="输入问题…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <button id="chatSend">发送</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- AI 设置弹窗 -->
+  <div class="modal-mask" id="settingsMask">
+    <div class="modal">
+      <div class="modal-head">
+        <span class="modal-title">AI 设置</span>
+        <button class="modal-close" id="settingsClose">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="field">
+          <label>服务商</label>
+          <select id="cfgProvider"></select>
+          <div class="hint" id="providerHint"></div>
+        </div>
+
+        <div class="field">
+          <label>接口地址（Base URL）</label>
+          <input type="text" id="cfgBaseUrl" placeholder="https://api.deepseek.com/v1">
+        </div>
+
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="cfgApiKey" placeholder="粘贴你的 API Key">
+        </div>
+
+        <div class="field">
+          <label>模型名称</label>
+          <input type="text" id="cfgModel" placeholder="deepseek-reasoner" list="modelOptions">
+          <datalist id="modelOptions"></datalist>
+        </div>
+
+        <div class="field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="cfgInject"> 提问时自动附带实时行情快照
+          </label>
+        </div>
+
+        <div class="field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="cfgTools"> 允许 AI 主动读取数据（工具调用）
+          </label>
+          <div class="hint">开启后 AI 可按需自己读取任意品种、任意周期的 K线与指标，
+            不再局限于自动附带的数据。需模型支持函数调用（如 deepseek-chat、GLM-4、通义千问）；
+            不支持时会自动降级，不影响使用。</div>
+        </div>
+
+        <div class="field">
+          <label>分析技能 Skill <span class="label-note" id="skillStats"></span></label>
+          <div class="skill-list" id="skillList"></div>
+          <div class="skill-actions">
+            <button class="btn-ghost" id="importSkillBtn">导入技能文件（.txt / .md）</button>
+          </div>
+          <div class="hint" id="skillHint">勾选的技能会注入 AI，并作为必须遵守的分析规程。</div>
+        </div>
+
+        <div class="field">
+          <label>相似问题缓存</label>
+          <div class="cache-row">
+            <span class="hint" id="cacheStats">—</span>
+            <button class="btn-ghost" id="clearCacheBtn">清空缓存</button>
+          </div>
+          <div class="hint">问过或高度相似的问题直接返回上次答案，不再调用 AI。</div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <span class="save-hint" id="saveHint"></span>
+        <button class="btn" id="cfgSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

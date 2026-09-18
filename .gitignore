@@ -1,0 +1,29 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# --- 打包产物 ---
+dist/
+build/
+*.spec
+
+# --- 运行期数据 ---
+cache.db
+selftest.log
+error.log
+reports/
+*.log
+
+# --- 密钥：绝不入库 ---
+config.json
+
+# --- 大体积二进制（参赛交付物里的视频与网盘压缩包，另行保管） ---
+*.mp4
+参赛文件/网盘上传/*.zip
+
+# --- 迁移过程产生的临时脚本 ---
+_*.js
+_*.txt
