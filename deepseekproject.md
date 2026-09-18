@@ -27,6 +27,7 @@ jiangmenjinlianghua/
 ├── config.json               # AI 配置（含 API Key，本地明文保存）
 ├── cache.db                  # 相似问题缓存（SQLite）
 ├── jin10_quota.json          # 金十额度计数（按北京时间自然日重置，运行时生成）
+├── reports/                  # 导出的分析报告与图表 PNG（运行时生成）
 │
 ├── docs/                     # 标准文件
 │   ├── 01-项目需求说明.md
@@ -50,6 +51,8 @@ jiangmenjinlianghua/
 │   ├── chat.py               # 对话会话 + 提示词组装
 │   ├── skills.py             # 技能（Skill）加载
 │   ├── qacache.py            # 相似问题缓存
+│   ├── chart.py              # 分析图表（K线 + 浪型 + 支撑压力 + 止盈止损，阶段 9）
+│   ├── report.py             # 报告导出（.md + 自包含 .html → reports/，阶段 9）
 │   ├── config.py             # 配置读写
 │   └── api.py                # 暴露给前端的 js_api
 │
@@ -75,6 +78,7 @@ jiangmenjinlianghua/
 │   ├── verify_stage8_sources*.py # 阶段 8 品种数据源探测（打印原始报文与字段下标）
 │   ├── test_stage7.py        # 阶段 7 自测（离线可跑；真连需 token）
 │   ├── test_stage8.py        # 阶段 8 自测（周期矩阵双向断言，联网）
+│   ├── test_stage9.py        # 阶段 9 自测（出图 + 报告导出）
 │   └── test_*.py             # 其它模块测试脚本
 │
 │   ⚠️ 以 `_` 开头的脚本/产物（如 `_jin10_token.txt`）是开发期临时件，不入库
@@ -112,6 +116,9 @@ jiangmenjinlianghua/
 
 # 阶段 8 自测（联网，校验 25 个品种的实时行情与可用周期矩阵）
 .\.venv\Scripts\python.exe tools\test_stage8.py
+
+# 阶段 9 自测（出图 + 报告导出，联网取K线）
+.\.venv\Scripts\python.exe tools\test_stage9.py
 ```
 
 ## 4. 工作说明（开发约定）
