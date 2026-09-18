@@ -16,6 +16,8 @@ selftest.log
 error.log
 reports/
 *.log
+# 金十额度计数（运行时状态，按北京时间自然日重置）
+jin10_quota.json
 
 # --- 密钥：绝不入库 ---
 config.json
@@ -24,6 +26,9 @@ config.json
 *.mp4
 参赛文件/网盘上传/*.zip
 
-# --- 迁移过程产生的临时脚本 ---
+# --- 开发期临时件：以 _ 开头的脚本/产物，以及 tools/ 下的一次性探查文件 ---
+# 这类文件可能含联调用 token（如 tools/_jin10_token.txt），一律不入库
 _*.js
 _*.txt
+_*.py
+tools/_*
