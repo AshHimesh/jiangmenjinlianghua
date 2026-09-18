@@ -26,6 +26,7 @@ jiangmenjinlianghua/
 ├── requirements.txt          # Python 依赖
 ├── config.json               # AI 配置（含 API Key，本地明文保存）
 ├── cache.db                  # 相似问题缓存（SQLite）
+├── jin10_quota.json          # 金十额度计数（按北京时间自然日重置，运行时生成）
 │
 ├── docs/                     # 标准文件
 │   ├── 01-项目需求说明.md
@@ -43,7 +44,9 @@ jiangmenjinlianghua/
 │   ├── indicators.py         # 技术指标计算
 │   ├── analysis.py           # 多周期报告 + 品种识别 + 缓存预热
 │   ├── ai.py                 # OpenAI 兼容流式调用 + 工具调用循环
-│   ├── tools.py              # AI 可调用的工具（读K线/读指标/查品种周期）
+│   ├── tools.py              # AI 可调用的工具（读K线/指标/品种；金十 8 个工具按需启用）
+│   ├── mcp.py                # 标准 MCP 客户端（阶段 7，仅金十在用）
+│   ├── jin10.py              # 金十业务层：8 个工具 + 额度保护 + 来源标注
 │   ├── chat.py               # 对话会话 + 提示词组装
 │   ├── skills.py             # 技能（Skill）加载
 │   ├── qacache.py            # 相似问题缓存
@@ -68,7 +71,11 @@ jiangmenjinlianghua/
 │   ├── make_icon.py          # 生成程序图标与界面头像
 │   ├── check_exe_icon.py     # 检查 exe 内图标资源尺寸
 │   ├── refresh_icon_cache.py # 重建 Windows 图标缓存（换图标后 Explorer 不刷新时用）
-│   └── test_*.py             # 各模块测试脚本
+│   ├── check_jin10_mcp.py    # 金十 MCP 探测（需 JIN10_DEV_TOKEN，不硬编码 token）
+│   ├── test_stage7.py        # 阶段 7 自测（离线可跑；真连需 token）
+│   └── test_*.py             # 其它模块测试脚本
+│
+│   ⚠️ 以 `_` 开头的脚本/产物（如 `_jin10_token.txt`）是开发期临时件，不入库
 │
 ├── 开发日志/                  # 每日开发日志
 │
@@ -97,6 +104,9 @@ jiangmenjinlianghua/
 
 # 创建当天开发日志
 .\.venv\Scripts\python.exe tools\daily_log.py
+
+# 阶段 7 自测（离线可跑；要真连金十先设环境变量 JIN10_DEV_TOKEN）
+.\.venv\Scripts\python.exe tools\test_stage7.py
 ```
 
 ## 4. 工作说明（开发约定）
