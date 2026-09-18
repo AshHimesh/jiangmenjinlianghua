@@ -54,6 +54,12 @@ LEVEL_STYLE = {
 }
 
 
+def st_label(key, j):
+    """某类价位的图上标签（分档止盈带序号 TP1/TP2/…）。"""
+    base = LEVEL_STYLE[key]["label"]
+    return base + ("TP%d" % (j + 1)) if key == "take_profit" else base
+
+
 def resolve_font():
     """返回可用的中文字体文件路径；找不到返回 None（图上中文会变方块，但不崩）。"""
     if not _font_cache["checked"]:
@@ -192,35 +198,47 @@ def render(symbol, period, waves=None, support=None, resistance=None,
     ax.set_ylim(ymin - pad, ymax + pad)
 
     # ---- 水平标注线 + 右侧文字 ----
+    # 先收集所有价位（AI 经常把同一个价位同时给成「压力位」和「止盈 TP1」，
+    # 若各画各的，两条线与两个标签会完全叠在一起），同价位合并成一条线、标签拼接。
+    level_items = []                     # (y, style_key, label)
     for key, values in (("support", support), ("resistance", resistance),
                         ("take_profit", take_profit)):
-        st = LEVEL_STYLE[key]
         for j, v in enumerate(values or []):
             try:
                 y = float(v)
             except (TypeError, ValueError):
                 continue
-            label = st["label"] + (("TP%d" % (j + 1)) if key == "take_profit" else "")
-            ax.axhline(y, color=st["color"], linestyle=st["ls"], linewidth=st["lw"],
-                       alpha=0.9, zorder=1)
-            ax.annotate("%s %g" % (label, y), xy=(1.0, y),
-                        xycoords=("axes fraction", "data"), xytext=(5, 0),
-                        textcoords="offset points", va="center", ha="left",
-                        fontsize=8.5, color=st["color"], fontproperties=_font(8.5), zorder=6)
-
+            label = st_label(key, j)
+            level_items.append((y, key, label))
     for key in ("entry", "stop_loss"):
-        v = locals().get(key)
         try:
-            y = float(v)
+            y = float(locals().get(key))
         except (TypeError, ValueError):
             continue
-        st = LEVEL_STYLE[key]
+        level_items.append((y, key, LEVEL_STYLE[key]["label"]))
+
+    merged = {}
+    for y, key, label in level_items:
+        slot = merged.setdefault(round(y, 4), {"y": y, "key": key, "labels": []})
+        if label not in slot["labels"]:
+            slot["labels"].append(label)
+
+    # 标签防重叠：按价位排序后逐个往下找空位（相邻标签至少留出约 2.2% 量程）
+    used_text_y = []
+    tol = (ymax - ymin) * 0.022 or 1e-9
+    for item in sorted(merged.values(), key=lambda d: d["y"]):
+        y, st = item["y"], LEVEL_STYLE[item["key"]]
         ax.axhline(y, color=st["color"], linestyle=st["ls"], linewidth=st["lw"],
-                   alpha=0.95, zorder=1)
-        ax.annotate("%s %g" % (st["label"], y), xy=(1.0, y),
+                   alpha=0.9, zorder=1)
+        text_y = y
+        while any(abs(text_y - u) < tol for u in used_text_y):
+            text_y += tol
+        used_text_y.append(text_y)
+        text = "%s  %g" % (" / ".join(item["labels"]), y)
+        ax.annotate(text, xy=(1.0, text_y),
                     xycoords=("axes fraction", "data"), xytext=(5, 0),
                     textcoords="offset points", va="center", ha="left",
-                    fontsize=9, color=st["color"], fontproperties=_font(9), zorder=6)
+                    fontsize=8.5, color=st["color"], fontproperties=_font(8.5), zorder=6)
 
     # ---- 浪型标注 ----
     for k, w in enumerate(waves or []):
