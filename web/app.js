@@ -15,6 +15,9 @@ let lastQuestion = null;
 
 let skillData = { skills: [], active: [], stats: {} };
 
+// 金十数据（阶段 7）状态
+let jin10Status = { available: false, enabled: false, has_key: false, covered: [], quota: {} };
+
 function getApi() {
   return (window.pywebview && window.pywebview.api) || null;
 }
@@ -29,6 +32,7 @@ function init() {
   bindEvents();
   loadSymbols();
   loadConfig();
+  loadJin10Status();
   setInterval(refreshQuotes, 1000);
 }
 
@@ -69,10 +73,22 @@ function renderSidebar() {
       const el = document.createElement('div');
       el.className = 'symbol-item';
       el.dataset.name = item.name;
+      // 重建左栏时保住当前选中项的高亮（否则每次重画都会掉选中态）
+      if (item.name === currentName) el.classList.add('active');
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 's-name';
       nameSpan.textContent = item.name;
+
+      // R7-B：金十也覆盖该品种时打角标。
+      // 注意只是标明「金十可作为兜底源」，主价格仍来自免费源，不能让人误以为价格出自金十。
+      if (jin10Status.available && (jin10Status.covered || []).indexOf(item.name) >= 0) {
+        const badge = document.createElement('span');
+        badge.className = 's-src jin10';
+        badge.textContent = '金十';
+        badge.title = '金十数据也提供该品种（兜底源）；此处显示的价格仍来自免费源';
+        nameSpan.appendChild(badge);
+      }
 
       const priceSpan = document.createElement('span');
       priceSpan.className = 's-price';
@@ -120,6 +136,7 @@ function renderQuote(name) {
   const changeEl = document.getElementById('quoteChange');
   const unitEl = document.getElementById('quoteUnit');
   const timeEl = document.getElementById('quoteTime');
+  const srcEl = document.getElementById('quoteSource');
 
   if (item) unitEl.textContent = item.unit;
 
@@ -129,8 +146,15 @@ function renderQuote(name) {
     changeEl.textContent = '--';
     changeEl.className = 'quote-change flat';
     timeEl.textContent = '数据加载中…';
+    srcEl.textContent = '来源：—';
+    srcEl.className = 'quote-src';
     return;
   }
+
+  // R7-B：行情看板的价格恒来自免费源。
+  // 金十只走 AI 按需调用（R7-C 禁止把金十接进刷新循环），所以这里不该出现金十分支。
+  srcEl.textContent = '来源：新浪财经（免费源）';
+  srcEl.className = 'quote-src';
 
   priceEl.textContent = formatPrice(q.price);
   priceEl.className = 'quote-price ' + changeClass(q.change);
@@ -204,12 +228,16 @@ function openSettings() {
   document.getElementById('cfgModel').value = cfg.model || '';
   document.getElementById('cfgInject').checked = cfg.inject_market !== false;
   document.getElementById('cfgTools').checked = cfg.enable_tools !== false;
+  document.getElementById('cfgJin10Enabled').checked = cfg.jin10_enabled === true;
+  document.getElementById('cfgJin10Key').value = cfg.jin10_api_key || '';
+  document.getElementById('jin10TestOut').style.display = 'none';
   applyProvider(cfg.provider || 'deepseek', false);
   document.getElementById('saveHint').textContent = '';
   document.getElementById('skillHint').textContent = '勾选的技能会注入 AI，并作为必须遵守的分析规程。';
   document.getElementById('settingsMask').classList.add('show');
   loadSkills();
   loadCacheStats();
+  loadJin10Status();
 }
 
 function closeSettings() {
@@ -226,14 +254,97 @@ async function saveSettings() {
     model: document.getElementById('cfgModel').value.trim(),
     inject_market: document.getElementById('cfgInject').checked,
     enable_tools: document.getElementById('cfgTools').checked,
+    jin10_enabled: document.getElementById('cfgJin10Enabled').checked,
+    jin10_api_key: document.getElementById('cfgJin10Key').value.trim(),
   };
   try {
     cfg = await api.save_config(payload);
     document.getElementById('saveHint').textContent = '已保存 ✓';
+    await loadJin10Status();
     setTimeout(closeSettings, 600);
   } catch (e) {
     document.getElementById('saveHint').textContent = '保存失败：' + e;
   }
+}
+
+// ================= 金十数据（阶段 7）=================
+async function loadJin10Status() {
+  const api = getApi();
+  if (!api || !api.get_jin10_status) return;
+  try {
+    jin10Status = await api.get_jin10_status();
+  } catch (e) {
+    jin10Status = { available: false, covered: [] };
+  }
+  renderJin10Status();
+  // 角标依赖金十可用性，状态变了要重画左栏
+  if (groups.length) renderSidebar();
+  if (currentName) updateSidebarPrices();
+}
+
+function renderJin10Status() {
+  const el = document.getElementById('jin10Status');
+  if (!el) return;
+  const q = jin10Status.quota || {};
+  const parts = [];
+
+  if (!jin10Status.enabled) {
+    parts.push('未启用');
+  } else if (!jin10Status.has_key) {
+    parts.push('已启用，但还没填 Key');
+  } else {
+    parts.push('已启用');
+    parts.push('今日已用 ' + (q.total || 0) + ' / ' + (q.limit || 1500) + ' 次');
+  }
+  parts.push('覆盖 ' + (jin10Status.codes_count || 0) + ' 个报价品种');
+  el.textContent = '状态：' + parts.join(' · ');
+
+  const disabledList = (jin10Status.not_supported || []).length
+    ? '；金十不提供：' + jin10Status.not_supported.join('、')
+    : '';
+  el.title = '金十可用品种（名称可与本项目品种对应）：' +
+    (jin10Status.covered || []).join('、') + disabledList;
+}
+
+async function testJin10() {
+  const api = getApi();
+  if (!api || !api.jin10_selftest) return;
+  const out = document.getElementById('jin10TestOut');
+  const status = document.getElementById('jin10Status');
+
+  // 自检用的是配置里的 Key，所以先把当前输入框里的值存下去
+  try {
+    await api.save_config({
+      provider: document.getElementById('cfgProvider').value,
+      base_url: document.getElementById('cfgBaseUrl').value.trim(),
+      api_key: document.getElementById('cfgApiKey').value.trim(),
+      model: document.getElementById('cfgModel').value.trim(),
+      inject_market: document.getElementById('cfgInject').checked,
+      enable_tools: document.getElementById('cfgTools').checked,
+      jin10_enabled: document.getElementById('cfgJin10Enabled').checked,
+      jin10_api_key: document.getElementById('cfgJin10Key').value.trim(),
+    });
+  } catch (e) {
+    /* 保存失败也继续试，下面会报错出来 */
+  }
+
+  out.style.display = '';
+  out.textContent = '正在连接金十 MCP 服务…';
+  status.textContent = '正在自检…';
+
+  try {
+    const r = await api.jin10_selftest();
+    if (r.skipped) {
+      out.textContent = '⏭ ' + r.line;
+    } else if (r.ok) {
+      out.textContent = '✅ ' + r.line + (r.detail ? '\n\n' + r.detail : '');
+    } else {
+      out.textContent = '❌ ' + r.line + (r.detail ? '\n\n' + r.detail : '');
+    }
+  } catch (e) {
+    out.textContent = '❌ 自检失败：' + e;
+  }
+  await loadJin10Status();
 }
 
 // ================= 技能 Skill =================
@@ -662,6 +773,7 @@ function bindEvents() {
   });
   document.getElementById('importSkillBtn').addEventListener('click', importSkill);
   document.getElementById('clearCacheBtn').addEventListener('click', clearCache);
+  document.getElementById('jin10TestBtn').addEventListener('click', testJin10);
 
   const input = document.getElementById('chatInput');
   input.addEventListener('input', () => autoGrow(input));

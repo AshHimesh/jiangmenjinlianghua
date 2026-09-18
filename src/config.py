@@ -13,6 +13,9 @@ from .paths import data_path
 # 配置文件放在「用户数据目录」（打包后即 exe 旁边，方便用户备份/修改）
 CONFIG_PATH = data_path("config.json")
 
+# 金十数据 MCP 端点（阶段 7）。Key 由用户在 ⚙ 设置面板自行填写。
+JIN10_BASE_URL = "https://mcp.jin10.com/mcp"
+
 # 服务商预设（均为 OpenAI 兼容接口，用户也可选「自定义」手填）
 PROVIDERS = [
     {
@@ -69,6 +72,12 @@ DEFAULTS = {
     "enable_tools": True,
     # 激活的技能文件列表；None 或空 = skills 目录下全部激活
     "active_skills": None,
+    # ---- 金十数据（阶段 7）----
+    # R7-A：金十功能默认关闭，Key 必须由最终用户自己填写，程序里绝不硬编码。
+    # 与 api_key 一样以明文保存在本地 config.json，仅本机使用。
+    "jin10_enabled": False,
+    "jin10_api_key": "",
+    "jin10_base_url": JIN10_BASE_URL,
 }
 
 

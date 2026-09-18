@@ -136,6 +136,34 @@ def _selftest():
             log(traceback.format_exc())
 
         log("")
+        log("---- 金十数据（阶段 7 · MCP）----")
+        try:
+            from src import jin10
+
+            st = jin10.status()
+            log("  启用开关        : %s" % st["enabled"])
+            log("  已填 API Key    : %s" % st["has_key"])
+            log("  功能可用        : %s" % st["available"])
+            if st["reason"]:
+                log("  说明            : %s" % st["reason"])
+            log("  端点            : %s" % st["base_url"])
+            log("  覆盖报价品种    : %d 个" % st["codes_count"])
+            q = st["quota"]
+            log("  今日已用额度    : %d / %d 次（%s）" % (q["total"], q["limit"], q["date"]))
+
+            r = jin10.selftest()
+            for ln in (r.get("line") or "").split("\n"):
+                if ln.strip():
+                    log("  连通性          : %s" % ln)
+            for ln in (r.get("detail") or "").split("\n"):
+                if ln.strip():
+                    log("                    %s" % ln)
+        except Exception as e:
+            log("  金十检查失败    : %r" % e)
+            import traceback
+            log(traceback.format_exc())
+
+        log("")
         log("---- 缓存 ----")
         try:
             log("  %s" % qacache.stats())

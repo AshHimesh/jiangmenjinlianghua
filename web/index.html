@@ -31,6 +31,7 @@
           <div class="quote-meta">
             <span class="quote-change" id="quoteChange">--</span>
             <span class="quote-unit" id="quoteUnit"></span>
+            <span class="quote-src" id="quoteSource">来源：免费源</span>
           </div>
           <div class="quote-time" id="quoteTime">正在加载行情…</div>
         </div>
@@ -108,6 +109,39 @@
             <button class="btn-ghost" id="importSkillBtn">导入技能文件（.txt / .md）</button>
           </div>
           <div class="hint" id="skillHint">勾选的技能会注入 AI，并作为必须遵守的分析规程。</div>
+        </div>
+
+        <div class="field">
+          <label>
+            金十数据
+            <span class="src-badge jin10">付费源 · 按需调用</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="cfgJin10Enabled"> 启用金十数据（快讯 / 资讯 / 财经日历）
+          </label>
+          <div class="hint">
+            金十数据通过 MCP 协议接入，提供快讯、深度资讯与<b>财经日历</b>——技能要求的
+            「非农、CPI、FOMC 前减仓」需要日历才能执行。<br>
+            金十有额度限制（每个工具每天 1500 次），只会被 AI 按需调用，<b>不参与行情刷新</b>。
+          </div>
+        </div>
+
+        <div class="field">
+          <label>金十 API Key <span class="label-note">由你自己填写</span></label>
+          <input type="password" id="cfgJin10Key" placeholder="粘贴你自己的金十 API Key">
+          <div class="hint">
+            程序里不预置任何 Key，必须填写你自己的才能启用。
+            与本机其它配置一样，以明文保存在本地 <code>config.json</code>，仅本机使用、不会上传。
+          </div>
+        </div>
+
+        <div class="field">
+          <label>连接自检</label>
+          <div class="cache-row">
+            <span class="hint" id="jin10Status">—</span>
+            <button class="btn-ghost" id="jin10TestBtn">测试连接</button>
+          </div>
+          <pre class="selftest-out" id="jin10TestOut" style="display:none"></pre>
         </div>
 
         <div class="field">

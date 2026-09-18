@@ -694,3 +694,65 @@ body {
 .btn:hover {
   opacity: 0.88;
 }
+
+/* ===== 数据来源标注（阶段 7 · R7-B）===== */
+
+/* 价格区右侧的来源标签 */
+.quote-src {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+/* 左栏品种列表的角标（标明金十也可提供该品种，是兜底源） */
+.s-src {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 14px;
+  vertical-align: 1px;
+}
+
+.s-src.jin10 {
+  color: #a0791f;
+}
+
+/* 设置面板里的小标签 */
+.src-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid #e6d8b5;
+  border-radius: 10px;
+  background: #fdf8ec;
+  color: #a0791f;
+  font-size: 10px;
+  font-weight: normal;
+}
+
+/* 连接自检输出 */
+.selftest-out {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #f8f9fb;
+  color: var(--text-sub);
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hint code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-panel);
+  font-size: 11px;
+}

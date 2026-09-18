@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """江门金量化 · 暴露给前端（pywebview js_api）的接口。"""
-from . import qacache
+from . import jin10, qacache
 from .analysis import warm
 from .config import PROVIDERS, load_config, save_config
 from .skills import import_skill, list_skills, resolve_active, stats as skill_stats
@@ -32,7 +32,33 @@ class Api:
 
     def save_config(self, cfg):
         """保存 AI 配置，返回保存后的配置。"""
-        return save_config(cfg)
+        saved = save_config(cfg)
+        # Key / 端点变了要丢掉旧的金十会话，否则会拿着旧凭据继续用
+        try:
+            jin10.reset_client()
+        except Exception:
+            pass
+        return saved
+
+    # ---------- 金十数据（阶段 7）----------
+    def get_jin10_status(self):
+        """金十启用状态、今日额度用量、品种覆盖数（给 ⚙ 面板展示）。"""
+        try:
+            return jin10.status()
+        except Exception as e:
+            return {
+                "enabled": False, "has_key": False, "available": False,
+                "reason": "金十状态读取失败：%s" % e,
+                "base_url": "", "quota": {"date": "", "limit": 0, "total": 0, "tools": {}},
+                "codes_count": 0,
+            }
+
+    def jin10_selftest(self):
+        """点「连接自检」时调用：真实握手 + 一次工具调用，结果直接展示给用户。"""
+        try:
+            return jin10.selftest()
+        except Exception as e:
+            return {"ok": False, "skipped": False, "line": "自检异常：%s" % e, "detail": ""}
 
     # ---------- 技能 ----------
     def get_skills(self):

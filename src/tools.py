@@ -3,15 +3,30 @@
 江门金量化 · AI 工具（Function Calling）
 
 让 AI 可以**按需**读取数据，而不是只能看预先注入的内容：
+
+免费源（新浪 AKShare，主力）：
     - get_kline        读取任意品种/周期的原始K线
     - get_indicators   读取任意品种/周期的技术指标
     - list_symbols     查询品种清单与各自支持的周期
 
-注意：函数调用需要模型支持（DeepSeek-chat / GLM-4 / Qwen / GPT 等），
-推理模型（如 deepseek-reasoner）多数不支持，届时会自动降级为纯文本注入模式。
+金十数据（阶段 7，MCP 协议；需用户在 ⚙ 设置里填自己的 Key）：
+    - jin10_quote / jin10_kline          行情与分钟级K线
+    - jin10_flash / jin10_search_flash   快讯列表 / 搜索
+    - jin10_news / jin10_search_news / jin10_news_detail   资讯列表 / 搜索 / 详情
+    - jin10_calendar                     本周财经日历
+
+注意
+----
+1. 函数调用需要模型支持（DeepSeek-chat / GLM-4 / Qwen / GPT 等），
+   推理模型（如 deepseek-reasoner）多数不支持，届时会自动降级为纯文本注入模式。
+2. 金十工具统一加 `jin10_` 前缀，因为金十自己也有个叫 `get_kline` 的工具，
+   与本项目的 `get_kline`（走新浪免费源、支持多周期）语义不同，必须区分开。
+3. 金十工具有额度限制（每个工具每天 1500 次，R7-C），**只在 AI 主动调用时触发**，
+   绝不参与行情刷新循环。额度相关逻辑全部在 src/jin10.py。
 """
 import json
 
+from . import jin10
 from .indicators import summarize
 from .kline import PERIODS, PERIOD_NAME, get_kline
 from .symbols import SYMBOL_MAP
@@ -99,6 +114,173 @@ TOOL_SCHEMAS = [
 ]
 
 
+# ---------------- 金十数据工具（阶段 7，需用户配置 Key）----------------
+
+# 写进描述里的常用代码表。用户/模型也可以直接传中文名，resolve_code 会自行识别。
+_JIN10_CODE_HINT = (
+    "常用代码：XAUUSD=现货黄金、XAGUSD=现货白银、COPPER=现货铜、USOIL=WTI原油、"
+    "UKOIL=布伦特原油、SPX=标普500、NGAS=天然气、XPTUSD=现货铂金、XPDUSD=现货钯金、"
+    "DJI=道琼斯、N225=日经225、HSI=恒生指数、000001=上证指数、399001=深证成指、"
+    "000300=沪深300、399006=创业板指、899050=北证50、USDCNH=美元/人民币、"
+    "EURUSD=欧元/美元、USDJPY=美元/日元、GBPUSD=英镑/美元、USDHKD=美元/港元、"
+    "ICBCJCJ=工行积存金、CZBJCJ=浙商积存金、ZHJCJ=招行积存金、CMBCJCJ=民生积存金。"
+    "也可以直接传中文名（如「现货黄金」）。"
+)
+
+JIN10_TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_quote",
+            "description": (
+                "【金十数据】读取指定品种的实时行情报价（价格、涨跌幅、最高最低、成交量）。"
+                "金十覆盖的品种比免费源更广，含各国指数、外汇、各银行积存金。"
+                + _JIN10_CODE_HINT +
+                "注意：金十数据有每日调用额度，仅在免费源取不到、或需要金十独有品种时才用。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "品种代码或中文名，如 XAUUSD 或 现货黄金"},
+                },
+                "required": ["code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_kline",
+            "description": (
+                "【金十数据】读取指定品种的**分钟级**K线，最多回溯 24 小时、最多 100 根。"
+                "用于补充短线细节（逐根分钟K线、盘中跳空）。"
+                "需要日线以上的多周期K线时，请用 get_kline（走免费源）。"
+                + _JIN10_CODE_HINT
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "品种代码或中文名"},
+                    "time": {"type": "integer", "description": "起始 Unix 时间戳（秒），可选，默认当前"},
+                    "count": {"type": "integer", "description": "取多少根，1-100，默认 100"},
+                },
+                "required": ["code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_flash",
+            "description": (
+                "【金十数据】获取最新快讯列表（金十 7x24 快讯）。"
+                "用于了解当前市场突发消息、宏观事件、品种异动原因。"
+                "翻页时把上一页返回的 next_cursor 传进 cursor。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cursor": {"type": "string", "description": "分页游标，首次不传"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_search_flash",
+            "description": (
+                "【金十数据】按关键词搜索历史快讯，最多返回 150 条、不支持翻页。"
+                "适合查某品种/事件（如「黄金」「美联储」「非农」）的近期相关快讯。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词，如 黄金、美联储、非农"},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_news",
+            "description": "【金十数据】获取最新深度资讯文章列表（标题 + 摘要 + 链接）。可用 cursor 翻页。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cursor": {"type": "string", "description": "分页游标，首次不传"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_search_news",
+            "description": "【金十数据】按关键词搜索深度资讯文章，支持 cursor 翻页。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词"},
+                    "cursor": {"type": "string", "description": "分页游标，首次不传"},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_news_detail",
+            "description": (
+                "【金十数据】按文章 id 获取资讯正文详情。"
+                "id 来自 jin10_news / jin10_search_news 的返回结果。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "文章 id，如 230459"},
+                },
+                "required": ["id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "jin10_calendar",
+            "description": (
+                "【金十数据】获取**本周（周一到周日）财经日历**：数据公布时间、前值、预期、实际、"
+                "星级与利多利空。"
+                "重要：用户的技能要求「非农、CPI、FOMC 等重大事件前平仓或减仓」，"
+                "涉及交易计划、持仓建议、事件风险时**必须**先查日历。"
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]
+
+JIN10_TOOL_NAMES = [t["function"]["name"] for t in JIN10_TOOL_SCHEMAS]
+
+
+def active_tool_schemas(cfg=None):
+    """
+    本次请求可用的工具清单。
+
+    金十工具只在「开关打开 + 用户填了 Key」时才暴露给模型，
+    未配置时 AI 根本看不到它们，也就不会误调用（验收要求：优雅禁用）。
+    """
+    schemas = list(TOOL_SCHEMAS)
+    try:
+        if jin10.is_enabled(cfg):
+            schemas.extend(JIN10_TOOL_SCHEMAS)
+    except Exception:
+        pass
+    return schemas
+
+
 def _check(symbol, period):
     """参数校验，返回错误文本或 None。"""
     if symbol not in SYMBOL_MAP:
@@ -162,10 +344,55 @@ def _tool_list_symbols():
     return "\n".join(lines)
 
 
+# ---------------- 金十工具实现 ----------------
+# 全部委托给 src/jin10.py；那里已经保证「额度/未配置/网络错误」都返回可读文本。
+
+def _tool_jin10_quote(code):
+    return jin10.quote(code)
+
+
+def _tool_jin10_kline(code, time=None, count=None):
+    return jin10.kline(code, time_from=time, count=count)
+
+
+def _tool_jin10_flash(cursor=None):
+    return jin10.flash(cursor)
+
+
+def _tool_jin10_search_flash(keyword):
+    return jin10.search_flash(keyword)
+
+
+def _tool_jin10_news(cursor=None):
+    return jin10.news(cursor)
+
+
+def _tool_jin10_search_news(keyword, cursor=None):
+    return jin10.search_news(keyword, cursor)
+
+
+def _tool_jin10_news_detail(id):
+    return jin10.news_detail(id)
+
+
+def _tool_jin10_calendar():
+    return jin10.calendar()
+
+
 _EXECUTORS = {
     "get_kline": _tool_get_kline,
     "get_indicators": _tool_get_indicators,
     "list_symbols": lambda **_: _tool_list_symbols(),
+    # 金十（阶段 7）。即使未启用也注册：此时 jin10.* 会返回「未启用」的可读说明，
+    # 比让 execute 报「不存在该工具」更友好。
+    "jin10_quote": _tool_jin10_quote,
+    "jin10_kline": _tool_jin10_kline,
+    "jin10_flash": _tool_jin10_flash,
+    "jin10_search_flash": _tool_jin10_search_flash,
+    "jin10_news": _tool_jin10_news,
+    "jin10_search_news": _tool_jin10_search_news,
+    "jin10_news_detail": _tool_jin10_news_detail,
+    "jin10_calendar": _tool_jin10_calendar,
 }
 
 
@@ -213,4 +440,24 @@ def summarize_call(name, arguments):
         return "读取 %s 的%s指标" % (args.get("symbol", "?"), PERIOD_NAME.get(args.get("period"), args.get("period", "?")))
     if name == "list_symbols":
         return "查询可用品种与周期"
+
+    # 金十（阶段 7）—— 标签统一带「金十」，让用户在界面上能一眼看出数据出处（R7-B）
+    code = args.get("code", "?")
+    if name == "jin10_quote":
+        return "金十 · 读取 %s 实时行情" % code
+    if name == "jin10_kline":
+        return "金十 · 读取 %s 分钟K线" % code
+    if name == "jin10_flash":
+        return "金十 · 读取最新快讯"
+    if name == "jin10_search_flash":
+        return "金十 · 搜索快讯「%s」" % args.get("keyword", "?")
+    if name == "jin10_news":
+        return "金十 · 读取资讯列表"
+    if name == "jin10_search_news":
+        return "金十 · 搜索资讯「%s」" % args.get("keyword", "?")
+    if name == "jin10_news_detail":
+        return "金十 · 读取文章详情"
+    if name == "jin10_calendar":
+        return "金十 · 读取本周财经日历"
+
     return "调用工具 %s" % name

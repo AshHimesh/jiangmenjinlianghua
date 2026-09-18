@@ -14,7 +14,7 @@ from .analysis import build_reports, detect_symbols
 from . import qacache
 from .skills import build_skill_prompt
 from .symbols import GROUPS
-from .tools import TOOL_SCHEMAS, execute as tool_execute, summarize_call
+from .tools import active_tool_schemas, execute as tool_execute, summarize_call
 
 # 记录哪些模型不支持函数调用，避免每次都白试一轮
 _TOOLS_UNSUPPORTED = set()
@@ -58,6 +58,25 @@ TOOL_HINT = """
 4. 工具返回「暂无数据」时，如实告知用户该周期不可用，不要编造。
 """
 
+# 金十工具说明（仅在用户配置了金十 Key 且开关打开时附加）
+JIN10_HINT = """
+【金十数据工具（按需调用）】
+你还接入了金十数据（MCP），可以调用以下工具获取**免费源没有的信息**：
+- `jin10_calendar`：本周财经日历（数据公布时间、前值/预期/实际、星级、利多利空）
+- `jin10_flash` / `jin10_search_flash`：最新快讯 / 按关键词搜快讯
+- `jin10_news` / `jin10_search_news` / `jin10_news_detail`：深度资讯列表 / 搜索 / 正文
+- `jin10_quote` / `jin10_kline`：金十行情 / 分钟级K线（金十独有品种，如各银行积存金、各国指数、外汇）
+
+使用原则：
+1. **涉及交易计划、持仓建议、事件风险时，必须先调 `jin10_calendar` 查本周重大事件**
+   —— 技能要求「非农、CPI、FOMC 等重大事件前平仓或减仓」，没有日历就无法执行这条铁律。
+2. 需要解释行情异动、突发消息时，用快讯搜索。
+3. 只有免费源取不到的品种（如浙商积存金、恒生指数）才用 `jin10_quote` 兜底。
+4. **金十有每日调用额度，不要为了凑数据而反复调用**；已在其他数据里给出的信息不必再查。
+5. 【来源标注】凡是来自金十的数据，在你的回答里必须注明「来源：金十数据」，
+   与免费源数据区分开，让用户一眼能看出数据出处。
+"""
+
 # 技能注入说明（放在 skill 全文之前）
 SKILL_HEADER = """
 ════════════════════════════════════════
@@ -75,6 +94,13 @@ def build_system_prompt(cfg):
     cfg = cfg or {}
     if cfg.get("enable_tools"):
         base += "\n" + TOOL_HINT
+        # 金十只在真正可用时才提，避免模型调用一个不存在的工具
+        try:
+            from . import jin10
+            if jin10.is_enabled(cfg):
+                base += "\n" + JIN10_HINT
+        except Exception:
+            pass
     try:
         skill_text = build_skill_prompt(cfg.get("active_skills"))
     except Exception:
@@ -231,7 +257,8 @@ class ChatSession:
             def _run_stream(use_tool_schemas):
                 return stream_completion(
                     cfg.get("base_url", ""), cfg.get("api_key", ""), model, messages, on_delta,
-                    tools=TOOL_SCHEMAS if use_tool_schemas else None,
+                    # 金十工具只在可用时才暴露给模型（优雅禁用）
+                    tools=active_tool_schemas(cfg) if use_tool_schemas else None,
                     tool_executor=tool_execute if use_tool_schemas else None,
                     on_tool=on_tool if use_tool_schemas else None,
                 )
